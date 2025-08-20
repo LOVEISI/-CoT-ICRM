@@ -406,7 +406,8 @@ class GPT2Transformer(nn.Module):
             attn_pdrop=   0.0,
             use_cache=    True,
         )
-
+        num_classes = 2
+        self.label_embed = nn.Embedding(num_classes + 1, self._backbone.config.hidden_size)
         # 2) 构建读入层和 backbone，先不要 initialize backbone
         self._read_in  = nn.Linear(n_inputs,  hparams['n_embd'])
         self._backbone = GPT2Model(configuration)
@@ -436,14 +437,58 @@ class GPT2Transformer(nn.Module):
         # print("✅ GPT2 backbone frozen.")
 
     def forward(self, inputs):
-        xs, ys, inds, past = inputs
-        # …（跟你原来的一样）…
-        embeds = self._read_in(xs)
-        outputs = self._backbone(inputs_embeds=embeds, past_key_values=past)
-        prediction = self._read_out(outputs.last_hidden_state)
-        # 返回 prediction 和 past_key_values
-        return prediction[:, :, :][:, inds], outputs.past_key_values
+        xs, ys, inds, past = inputs                  # xs:[B,T,?], ys:[B,T] or None
+        x_emb = self._read_in(xs)                    # [B,T,D]
+        B, T, D = x_emb.size()
+        # 1) 检查标签取值范围（是否超出 embedding 大小）
+        # print("[dbg] label_embed.num_embeddings =", self.label_embed.num_embeddings)
+        # print("[dbg] y range =", int(ys.min().item()), "→", int(ys.max().item()))
+        # assert ys.dtype == torch.long
+        # assert ys.min() >= 0 and ys.max() < self.label_embed.num_embeddings, "y index out of range"
 
+        # # 2) 检查序列长度是否超过 GPT-2 的 n_positions
+        # L = embeds.size(1) if 'embeds' in locals() else 2 * T
+        # n_pos = getattr(self._backbone.config, "n_positions", 1024)
+        # print("[dbg] seq len L =", L, "n_positions =", n_pos)
+        # assert L <= n_pos, "sequence length exceeds GPT-2 n_positions"
+
+        # # 3) 输入维对齐（避免隐式错误）
+        # d_model = getattr(self._backbone.config, "hidden_size",
+        #         getattr(self._backbone.config, "n_embd", None))
+        # print("[dbg] embeds dim =", (embeds if 'embeds' in locals() else x_emb).size(-1), "d_model =", d_model)
+
+        if ys is not None:
+            ys = ys.long()
+            if ys.dim() == 1:
+                ys = ys.view(B, -1)                  # [B,T] or [B,1]
+            # 训练阶段：我们希望交替序列里 LAB(y_t) 就是用真 y_t
+            # 如果你需要 BOS，可做 ys+1；这里直接用类索引即可：
+            y_emb = self.label_embed(ys)             # [B,T,D]
+
+            # 交替拼成 [IMG, LAB, IMG, LAB, ...]
+            L = 2 * T
+            embeds = x_emb.new_zeros(B, L, D)        # [B,2T,D]
+            embeds[:, 0::2, :] = x_emb               # 偶数位放图像
+            embeds[:, 1::2, :] = y_emb               # 奇数位放标签
+        else:
+            # 没有 ys 的场景就只用图像（很少见；训练/评估一般都有 ys）
+            embeds = x_emb
+
+        outputs = self._backbone(inputs_embeds=embeds, past_key_values=past)
+        hidden  = outputs.last_hidden_state          # [B,2T,D]
+        logits_all = self._read_out(hidden)          # [B,2T,C]
+
+        # 只取“标签位”的 logits（偶数位）：对齐成 [B,T,C] 供上层计算 loss
+        if embeds.size(1) == 2 * T:
+            logits = logits_all[:, 0::2, :]          # [B,T,C]
+        else:
+            # 没交替的 fallback（很少用到）
+            logits = logits_all
+
+        if inds is not None:
+            logits = logits[:, inds]
+
+        return logits, outputs.past_key_values
 
 # class GPT2Transformer(nn.Module):
 #     def __init__(self, n_inputs,  n_outputs, hparams):

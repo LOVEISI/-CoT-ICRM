@@ -120,43 +120,108 @@ class ERM(Algorithm):
     #     self.scaler.update()
     #     return metric_results
     def update(self, minibatches, unlabeled=None):
-    # 确保模型在训练模式
+        # 将整个网络切到训练模式（启用 Dropout/BN 的训练行为）
         self.network.train()
 
-        p_list = []
-        y_list = []
+        # 统计用：累计损失与样本数（用于epoch均值）；日志指标缓冲区
+        total_loss, total_n = 0.0, 0
+        all_logits, all_targets = [], []  # 仅用于统计训练指标，不参与梯度
 
-        # 清零梯度
-        self.optimizer.zero_grad()
+        # 读取 GPT-2 的位置上限（序列长度），没有则默认 1024
+        n_pos  = getattr(self.classifier._backbone.config, 'n_positions', 1024)
+        # 约定 label_embed 的最后一个 id 作为 BOS（序列起始标签）
+        bos_id = self.classifier.label_embed.num_embeddings - 1  # 约定 BOS 在最后一个 id
 
-        with autocast():
-            for _, (x, y) in enumerate(minibatches):
-                # 前向预测
-                out = self.predict(x, y)  # out.shape = [full, num_classes]
-                p_list.append(out)
+        # 遍历一个 epoch 内的所有 minibatch
+        for _, (x, y) in enumerate(minibatches):
+            # 送入设备；x 可能是 [B,3,H,W] 或 [B,T,3,H,W]；y 可能是 [B] 或 [B,T]
+            x = x.to(self.device)                    # 图像张量
+            y = y.to(self.device).long()             # 标签张量（整型）
 
-                # 按照 predict() 里相同的规则裁剪标签
-                B = y.size(0)
-                cl = self.train_context_len
-                full = (B // cl) * cl
-                y_list.append(y[:full])
+            # 若只有单步，则补时间维到 T=1，统一成 [B,T,3,H,W] / [B,T]
+            if x.ndim == 4: x = x.unsqueeze(1)       # -> [B,1,3,H,W]
+            if y.ndim == 1: y = y.unsqueeze(1)       # -> [B,1]
+            B, T = x.size(0), x.size(1)              # 批大小与时间步数
 
-            # 拼接所有小批次
-            p = torch.cat(p_list, dim=0)                # [∑full_i, num_classes]
-            all_y = torch.cat(y_list, dim=0).long()     # [∑full_i]
+            # 每一步会产生 2 个 token（x_token 与 y_token），总步数太大会超 n_positions
+            # 简单策略：按窗口训练，每个窗口长度不超过 n_pos//2；窗口之间不传递 past
+            max_steps = max(1, n_pos // 2)
 
-            # 计算 loss
-            loss = self.loss_func(p, all_y)
+            # 清零该 batch 的梯度
+            self.optimizer.zero_grad()
 
-        # 反向传播 & 优化器更新
-        loss.backward()
-        self.optimizer.step()
+            # 自动混合精度上下文（AMP），减少显存/加速；需搭配 GradScaler 更稳（此处按你原逻辑）
+            with autocast():
+                # 跨时间步累积的损失（标量张量）；以及日志缓冲（逐步收集 [B,C] 和 [B]）
+                loss_accum = None
+                step_logits_buf = []   # 保存每个时间步的 logits（形状 [B,C]）
+                step_targets_buf = []  # 保存每个时间步的目标 y_t（形状 [B]）
 
-        # 计算并返回指标
-        metric_results = utils.compute_metric(self.metrics, p, all_y)
-        metric_results = {f'train_{k}': v for k, v in metric_results.items()}
-        metric_results['train_loss'] = loss.item()
-        return metric_results
+                # 以窗口为单位遍历整段序列（避免超过 n_positions）
+                start = 0
+                while start < T:
+                    end  = min(T, start + max_steps) # 当前窗口右边界（不含）
+                    past = None                      # 窗口起点不继承上窗口的 KV cache
+                    # 窗口的第一步使用 BOS 作为“上一时刻标签”；形状 [B,1]
+                    prev_y = torch.full((B, 1), bos_id, dtype=torch.long, device=self.device)
+
+                    # 在窗口内做逐步自回归：t 从 start 到 end-1
+                    for t in range(start, end):
+                        # 取第 t 个时间步的图像，保持时间维长度为 1：形状 [B,1,3,H,W]
+                        x_step = x[:, t:t+1]  # 切片不复制数据
+
+                        # 一步自回归：把 (x_t, prev_y) 交给模型，同时传入 past（历史 KV）
+                        # 返回：
+                        #   logits_1: 本步预测的分类 logits，形状 [B,1,C]（只对应本步的 y_t）
+                        #   past    : 累积后的 KV，用于下一步继续解码
+                        logits_1, past = self.predict(
+                            x_step, prev_y, return_context=True, past_key_values=past
+                        )
+
+                        # 取本步的监督信号 y_t（真值），形状 [B]
+                        target_t = y[:, t]
+
+                        # 缓存到日志缓冲区（detach，避免参与反传）
+                        step_logits_buf.append(logits_1[:, 0, :])  # [B,C]
+                        step_targets_buf.append(target_t)          # [B]
+
+                        # 计算本步的交叉熵损失；默认 reduction='mean'（按 batch 求均值）
+                        loss_t = self.loss_func(logits_1[:, 0, :], target_t)
+
+                        # 将每步损失相加，得到整个窗口（或整个序列）的总损失
+                        if loss_accum is None:
+                            loss_accum = loss_t
+                        else:
+                            loss_accum = loss_accum + loss_t
+
+                        # 纯自回归：下一步的“上一标签”用当前步的模型预测（argmax）
+                        # 用 detach() 阻断梯度；keepdim=True 保持形状 [B,1]
+                        prev_y = logits_1[:, 0, :].detach().argmax(dim=-1, keepdim=True)
+
+                    # 移动到下一个窗口
+                    start = end
+
+            # 反向传播累计的损失（跨时间步之和），并更新参数
+            loss_accum.backward()
+            self.optimizer.step()
+
+            # 统计：将该 batch 的损失（乘以样本数 B）累加，稍后用于求平均损失
+            total_loss += float(loss_accum.item()) * B
+            total_n    += B
+
+            # 仅用于日志指标统计（不参与梯度，已在上面 append 时 detach）
+            # 将本 batch 的所有时间步拼接：logits -> [B*T, C]；targets -> [B*T]
+            all_logits.append(torch.cat(step_logits_buf, dim=0).detach())
+            all_targets.append(torch.cat(step_targets_buf, dim=0).detach())
+
+        # 汇总整个 epoch 的训练指标
+        p     = torch.cat(all_logits, dim=0)   # [Σ(B*T), C]
+        all_y = torch.cat(all_targets, dim=0)  # [Σ(B*T)]
+        metric = utils.compute_metric(self.metrics, p, all_y)      # 例如 {'accuracy': ...}
+        metric = {f"train_{k}": v for k, v in metric.items()}      # 打上 'train_' 前缀
+        metric["train_loss"] = total_loss / max(total_n, 1)        # 平均训练损失
+        return metric                                              # 返回日志指标字典
+
 
     def predict(self, x, y = None, model = None):
         print("不喜喜")
@@ -566,46 +631,116 @@ class ICRM(ERM):
     #     return out_layers if is_list else tuple(out_layers)
 
     
-    def _evaluate_robust(self, model, loader, metrics = ['accuracy'], test_cache = None):  #进行模型的 鲁棒性评估 ,metrics：一个列表，指定评估时使用的指标,test_cache：缓存的测试数据
-        test_cache_x, test_cache_y = test_cache #从 test_cache 中提取测试数据和标签。
-        assert test_cache_x is not None
-        assert test_cache_y is not None
-        self.network.eval()#将模型切换到 评估模式
-        # self.eval()
-        model.eval()
-        result = {}
-        for context_val in self.test_ctxt:  #遍历 self.test_ctxt 中的每个上下文值。self.test_ctxt 控制评估时使用的上下文长度，可以是不同的上下文长度（例如：0、25、50、75、100）。
-            with torch.no_grad():   #在评估过程中禁用梯度计算
-                if context_val == 0:    initial_past = None    
-                else:
-                    _, initial_past = self.predict(test_cache_x[:, :context_val], test_cache_y[:, :context_val], return_context = True)
-                    initial_past = self.repeat_past_key_values(initial_past, loader._bs)
-                #1. xunlian 2. 测试怎么用的
-                all_p, all_y = [],[]
-                for _, (x, y) in enumerate(loader):
-                    # print(f"[DEBUG] x.ndim = {x.ndim}, x.shape = {tuple(x.shape)}")  
-                    # # 如果是 5 维，那上下文长度就是 x.shape[1]  
-                    # if x.ndim == 5:
-                    #     print(f"[DEBUG] context length = {x.shape[1]}")
-                    x, y = x.to(self.device), y.to(self.device)   
-                    p, _ = self.predict(x, y, return_context = True, past_key_values = initial_past)   
-                    if y.ndim == 1: y_reshape = y.view(y.shape[0]//self.context_len, self.context_len)
-                    else:   y_reshape = y
-                    all_p.append(p);all_y.append(y_reshape)                    
-                
-                all_p, all_y = torch.cat(all_p, dim=0), torch.cat(all_y, dim=0)
-                # print(">> all_p:", all_p.shape, "→ all_p[:, -1, :]:", all_p[:, -1, :].shape)
-                # print(">> all_y:", all_y.shape, "→ all_y[:, -1]:", all_y[:, -1].shape)
-                ys_pred = all_p.squeeze()             # [20900, 2]
-                ys      = all_y.squeeze()             # [20900]
-                metric_results = utils.compute_metric(metrics, ys_pred, ys)
+    @torch.no_grad()
+    def _evaluate_robust(self, model, loader, metrics=['accuracy'], test_cache=None):
+        """
+        ICRM 风格鲁棒评估：对 test_ctxt 中每个 context_val
+        1) 用 test_cache 的前 context_val 步做 teacher-forcing 预热 → initial_past
+        2) 对评估 loader（单步或多步）继续做 teacher-forcing 推理，计算指标
+        """
+        assert test_cache is not None and len(test_cache) == 2
+        test_cache_x, test_cache_y = test_cache
 
-                # metric_results = utils.compute_metric(metrics, all_p[:, -1,:], all_y[:, -1])  
-                result.update({f'{metric}(e-{self.context_len - context_val})': metric_results[metric] for metric in metrics})  
+        self.network.eval()
+        model.eval()
+
+        device = self.device
+        result = {}
+
+        # 位置上限保护（上下文 2*context_val token）
+        n_pos = getattr(self.classifier._backbone.config, 'n_positions', 1024)
+
+        for context_val in self.test_ctxt:
+            with torch.no_grad():
+                # ---------- (1) 预热：用缓存序列的前 context_val 步构造 initial_past ----------
+                if context_val == 0:
+                    initial_past = None
+                    tokens_used = 0
+                else:
+                    # ---------- (1) 预热：改为“自回归”得到 initial_past ----------
+                    # 取前 context_val 步，并搬到 device；这里只用 x0 做自回归，y0 只为对齐形状/设备（不用真值）
+                    x0 = test_cache_x[:, :context_val].to(device)          # 期望 [B0, context_val, 3, H, W] 或 [B0, 3, H, W]
+                    if x0.ndim == 4:                                       # 若是 [B0,3,H,W]，补时间维
+                        x0 = x0.unsqueeze(1)                                # -> [B0,1,3,H,W]
+                    B0, T0 = x0.size(0), x0.size(1)
+
+                    # 位置上限检查：AR 预热每步也会追加 2 个 token（x_t 与 y_t）
+                    assert 2 * T0 <= n_pos, \
+                        f"warmup length(2*{T0}) exceeds n_positions({n_pos})"
+
+                    # AR 预热：从 BOS 开始，一步步预测 ŷ_t 并累积 past
+                    bos_id = self.classifier.label_embed.num_embeddings - 1   # 约定 BOS 的 id（确保 embedding 里预留了这个槽位）
+                    prev_y = torch.full((B0, 1), bos_id, dtype=torch.long, device=device)  # 第一步的“上一标签”
+                    past = None
+
+                    for t in range(T0):
+                        x_step = x0[:, t].unsqueeze(1)                        # [B0,1,3,H,W]
+                        # 关键：一步自回归；内部会构交替序列并把本步两个 token 累到 past 里
+                        logits_1, past = self.predict(
+                            x_step,                      # [B0,1,3,H,W]
+                            prev_y,                      # [B0,1]（t=0 用 BOS，其后用上一时刻预测）
+                            return_context=True,
+                            past_key_values=past
+                        )                                # logits_1:[B0,1,C]，past 更新
+
+                        # 下一步的上一标签 = 本步预测
+                        prev_y = logits_1[:, 0, :].argmax(dim=-1, keepdim=True)  # [B0,1]
+
+                    # 预热完成，保存 past，并记录 token 占用（每步 +2）
+                    initial_past = past
+                    tokens_used  = 2 * T0
+                    
+                # ---------- (2) 正式评估：对 loader 做 teacher-forcing ----------
+                all_logits = []
+                all_labels = []
+
+                for x, y in loader:
+                    # 送设备 & 规范形状到 [B,T,3,H,W] / [B,T]
+                    x = x.to(device)
+                    y = y.to(device).long()
+
+                    if x.ndim == 4:                 # [B,3,H,W] -> [B,1,3,H,W]
+                        x = x.unsqueeze(1)
+                    if y.ndim == 1:                 # [B] -> [B,1]
+                        y = y.unsqueeze(1)
+
+                    B, T = x.size(0), x.size(1)
+
+                    # 把 initial_past 重复到当前 batch 大小（若需要）
+                    past = None
+                    if initial_past is not None:
+                        # 你原来有 repeat_past_key_values；这里按当前 B 重复即可
+                        past = self.repeat_past_key_values(initial_past, B)
+
+                    # 位置上限检查：预热 tokens + 本批将追加的 2*T
+                    if tokens_used + 2 * T > n_pos:
+                        # 超限则丢弃 warmup，直接用本批自己做 teacher-forcing（与原始实现一致）
+                        past = None
+
+                    # teacher-forcing 推理：predict 返回 [B,T,C]（只取“x位”的 logits）
+                    p, _ = self.predict(x, y, return_context=True, past_key_values=past)  # p:[B,T,C]
+
+                    # 展平成 [B*T, C] / [B*T] 以便统一计算指标
+                    all_logits.append(p.reshape(-1, p.size(-1)))
+                    all_labels.append(y.reshape(-1))
+
+                if len(all_logits) == 0:
+                    # 空 loader 的兜底
+                    metric_results = {m: 0.0 for m in metrics}
+                else:
+                    ys_pred = torch.cat(all_logits, dim=0)  # [Σ(B*T), C]
+                    ys_true = torch.cat(all_labels, dim=0)  # [Σ(B*T)]
+                    metric_results = utils.compute_metric(metrics, ys_pred, ys_true)
+
+                # 与原版 key 一致：e-(self.context_len - context_val)
+                remain = max(0, getattr(self, 'context_len', 0) - context_val)
+                for m in metrics:
+                    result[f'{m}(e-{remain})'] = metric_results[m]
 
         self.network.train()
         model.train()
-        return result 
+        return result
+
     
     def evaluate(self, loader, module = 'train', cache = None):
         self.test_ctxt = list(range(0, 51, 5)) if module == 'test' else [0, 25, 50, 75, 100]   #定义上下文的长度

@@ -17,8 +17,8 @@ def _hparams(algorithm, dataset, random_seed):
     New algorithms / networks / etc. should add entries here.
     """
     
-    # SMALL_IMAGES = ['RareGroupRotatedMNIST', 'FEMNIST', 'ColoredMNIST']
     SMALL_IMAGES = ['RareGroupRotatedMNIST', 'FEMNIST','ColouredMNIST','ColouredMNIST01','ColouredMNIST025']
+    
     hparams = {}
 
     def _hparam(name, default_val, random_val_fn, override=False):
@@ -34,9 +34,9 @@ def _hparams(algorithm, dataset, random_seed):
     _hparam('data_augmentation', True, lambda r: True)
     _hparam('freeze_bn', 0, lambda r: 0) 
     _hparam('resnet18', False, lambda r: False)
-    _hparam('densenet121', False, lambda r: False)
+    _hparam('densenet121', True, lambda r: True)
     _hparam('resnet_dropout', 0, lambda r: 0)
-    _hparam('is_transformer', 0, lambda r: 0)
+    _hparam('is_transformer', 1, lambda r: 1)
     _hparam('loss','cross_entropy', lambda r: 'cross_entropy')
     _hparam('metrics',['acc'], lambda r: ['acc'])
     _hparam('optimizer_name', 'Adam', lambda r: 'Adam')
@@ -47,8 +47,6 @@ def _hparams(algorithm, dataset, random_seed):
     _hparam('is_iid_tr', 0, lambda r: 0)
     _hparam('print_last', 1, lambda r: 1)
     _hparam('is_supervised', 0, lambda r: 0)
-    
-    
 
     if dataset in SMALL_IMAGES:
         _hparam('lr', 1e-4, lambda r: 10**r.uniform(-4.5, -2.5))
@@ -66,16 +64,10 @@ def _hparams(algorithm, dataset, random_seed):
     if algorithm == 'ICRM':   
         _hparam('context_length', 100, lambda r: 100)                                   # because of start token
         _hparam('n_embd', 128, lambda r: 128)
-        _hparam('n_layer', 12, lambda r: 12)
+        _hparam('n_layer', 1, lambda r: 1)
         _hparam('n_head', 4, lambda r: 4) 
-        _hparam('freeze_bn', 1, lambda r: 1, override=True)
+        _hparam('freeze_bn', 1, lambda r: 1, override=True) 
         
-        # Memory Mosaic specific parameters
-        _hparam('use_mosaic', False, lambda r: False)                                    # whether to use Memory Mosaic instead of GPT2
-        _hparam('pmem_size', 2688, lambda r: int(r.choice([1024, 2048, 2688, 4096])))   # persistent memory size
-        _hparam('pmem_count', 1, lambda r: int(r.choice([1, 2, 4])))                     # number of persistent memories
-        _hparam('dropout', 0.0, lambda r: r.uniform(0.0, 0.2))                          # dropout rate for Memory Mosaic 
-    
     elif algorithm == 'ARM_CML': 
         _hparam('support_size', 100, lambda r: 100) 
         _hparam('adapt_bn', 0, lambda r: 0)
@@ -104,22 +96,8 @@ def _hparams(algorithm, dataset, random_seed):
    
     elif dataset == 'WILDSCamelyon' : 
         _hparam('data_augmentation', False, lambda r: False, override = True)
-        _hparam('batch_size', 400, lambda r: 400)
-        _hparam('test_batch_size', 500, lambda r: 500)
-    
-    # Memory Mosaic specific optimizations for different datasets
-    if algorithm == 'ICRM' and dataset in SMALL_IMAGES:
-        # Smaller parameters for small image datasets
-        _hparam('n_embd', 64, lambda r: int(r.choice([64, 128])), override=True)
-        _hparam('n_layer', 6, lambda r: int(r.choice([4, 6, 8])), override=True) 
-        _hparam('pmem_size', 1024, lambda r: int(r.choice([512, 1024, 2048])), override=True)
-        
-    elif algorithm == 'ICRM' and dataset == 'WILDSCamelyon':
-        # Larger parameters for complex datasets
-        _hparam('n_embd', 256, lambda r: int(r.choice([256, 512])), override=True)
-        _hparam('n_layer', 12, lambda r: int(r.choice([8, 12, 16])), override=True)
-        _hparam('pmem_size', 4096, lambda r: int(r.choice([2688, 4096, 8192])), override=True)
-        _hparam('pmem_count', 2, lambda r: int(r.choice([2, 4])), override=True)  
+        _hparam('batch_size', 100, lambda r: 100)
+        _hparam('test_batch_size', 500, lambda r: 500)  
            
     return hparams
          
