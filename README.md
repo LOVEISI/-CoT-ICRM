@@ -13,7 +13,7 @@
 ```
 python -m main --data_dir=/mnt/data02/gll_yong/ICRM/data/MNIST --algorithm ICRM --dataset ColouredMNIST
 ```
-使用ColoredMNIST数据集，注意--data_dir 要切换成真实的MNIST数据集的路径
+使用ColoredMNIST数据集，注意--data_dir 要切换成真实的MNIST数据集的路径(初始情况可以随意设置，会自动下载
 
 ## ⚙️ 环境依赖
 
