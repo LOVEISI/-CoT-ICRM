@@ -17,7 +17,7 @@ python -m main --data_dir=/mnt/data02/gll_yong/ICRM/data/MNIST --algorithm ICRM 
 
 ## ⚙️ 环境依赖
 
-**本地开发环境版本**（建议服务器保持一致）：
+**本地开发环境版本**：
 - Python 3.10
 - 其它依赖见 `requirements.txt`
 
