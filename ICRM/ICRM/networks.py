@@ -406,12 +406,13 @@ class GPT2Transformer(nn.Module):
             attn_pdrop=   0.0,
             use_cache=    True,
         )
-        num_classes = 2
-        self.label_embed = nn.Embedding(num_classes + 1, self._backbone.config.hidden_size)
+       
         # 2) 构建读入层和 backbone，先不要 initialize backbone
         self._read_in  = nn.Linear(n_inputs,  hparams['n_embd'])
         self._backbone = GPT2Model(configuration)
         self._read_out = nn.Linear(hparams['n_embd'], n_outputs)
+        num_classes = 2
+        self.label_embed = nn.Embedding(num_classes + 1, self._backbone.config.hidden_size)
 
         # 3) 初始化 read-in / read-out
         #    （只初始化这两层，backbone 保留预训练权重）
