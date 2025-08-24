@@ -1,15 +1,13 @@
 ## 📄项目结构和关键代码说明           
-├── FeAT/ # FeAT 模块代码  
-├── ICRM/ # ICRM 核心代码  
-    &nbsp;&nbsp;ICRM/  
-       &nbsp;&nbsp;&nbsp;&nbsp;main.py  #主要启动脚本，包含训练、验证、测试全流程  
-       &nbsp;&nbsp;&nbsp;&nbsp;networks.py #模型结构代码，关键是class GPT2Transformer下的forward函数的实现  
-       &nbsp;&nbsp;&nbsp;&nbsp;algorithms.py # 主要算法代码  其中关键的是 1. class ERM(Algorithm) 下的update 函数，是训练的时候调用的。 2. class ICRM(ERM) 下的evaluate 和 _evaluate_robust 函数，是验证和测试的时候用的，以及 predict函数：是在训练、验证和测试的时候都用同一个predict函数  
-       &nbsp;&nbsp;&nbsp;&nbsp;dataset.py  # ColoredMNIST的数据集在该方法的最后  
+├── FeAT/ # FeAT 模块代码   
+       &nbsp;&nbsp;main.py  #主要启动脚本，包含训练、验证、测试全流程  
+       &nbsp;&nbsp;networks.py #模型结构代码，关键是class GPT2Transformer下的forward函数的实现  
+       &nbsp;&nbsp;algorithms.py # 主要算法代码  其中关键的是 1. class ERM(Algorithm) 下的update 函数，是训练的时候调用的。 2. class ICRM(ERM) 下的evaluate 和 _evaluate_robust 函数，是验证和测试的时候用的，以及 predict函数：是在训练、验证和测试的时候都用同一个predict函数  
+      &nbsp;&nbsp;dataset.py  # ColoredMNIST的数据集在该方法的最后  
 
 
 ## 🚀示例命令
-在-CoT-ICRM/ICRM/ICRM下运行：  
+在-CoT-ICRM（就是最大的文件夹）下运行：  
 ```
 python -m main --data_dir=/mnt/data02/gll_yong/ICRM/data/MNIST --algorithm ICRM --dataset ColouredMNIST
 ```
