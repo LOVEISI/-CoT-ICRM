@@ -1,0 +1,90 @@
+=> Environment:
+	Python: 3.12.3
+	PyTorch: 2.3.0+cu121
+	Torchvision: 0.18.0+cu121
+	CUDA: 12.1
+	CUDNN: 8902
+	NumPy: 1.26.4
+	PIL: 10.3.0
+=> HParams:
+	additonal_metrics: ['worst_group', 'average']
+	batch_size: 100
+	beta1: 0.5
+	context_length: 100
+	data_augmentation: True
+	densenet121: True
+	device: cuda
+	freeze_bn: 1
+	is_iid_tr: 0
+	is_parallel: True
+	is_supervised: 0
+	is_transformer: 1
+	loss: cross_entropy
+	lr: 9.421443606372292e-05
+	metrics: ['acc']
+	n_embd: 128
+	n_head: 4
+	n_layer: 1
+	n_sampled_tasks: 0
+	nonlinear_classifier: False
+	num_features: 1
+	optimizer_name: Adam
+	output_dir: ~/ICRM/results/ColouredMNIST/ColouredMNIST-ICRM-MVvFfzAePC-20250824-232410/seed-0
+	overall_seed: 0
+	print_last: 1
+	resnet18: False
+	resnet_dropout: 0
+	terminal_command: /root/autodl-tmp/test/feta/ICRM/ICRM/main.py --data_dir=/mnt/data02/gll_yong/ICRM/data/MNIST --algorithm ICRM --dataset ColouredMNIST
+	test_batch_size: 100
+	trial_seed: 0
+	weight_decay: 9.220948243966033e-05
+=> Seed of the run set to 0
+=> n training domains: 3; sizes = [20999, 4666, 5833]
+=> n validation domains: 3
+=> n testing domains:    3
+
+对对对就是这个！！
+=> Using data parallel
+=> Checkpointing based on acc(e-0)
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/main.py", line 220, in <module>
+    val_metric_results = algorithm.evaluate(loader, cache = validation_cache[index])#val_metric_results 是评估结果，通常是一个字典，包含了各种性能指标（如准确率、损失等）                
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/algorithms.py", line 747, in evaluate
+    result = self._evaluate_robust(self.network, loader, self.hparams['metrics'],  cache)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/algorithms.py", line 721, in _evaluate_robust
+    p, _ = self.predict(x, y, return_context=True, past_key_values=past)  # p:[B,T,C]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/algorithms.py", line 520, in predict
+    outputs = self.classifier((x, y, None, past_key_values))  #记录了前面已经处理的数据对当前预测的影响
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/networks.py", line 478, in forward
+    outputs = self._backbone(inputs_embeds=embeds, past_key_values=past)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/transformers/models/gpt2/modeling_gpt2.py", line 875, in forward
+    causal_mask = create_causal_mask(
+                  ^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/transformers/masking_utils.py", line 805, in create_causal_mask
+    causal_mask = mask_interface(
+                  ^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/transformers/masking_utils.py", line 449, in sdpa_mask_older_torch
+    causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
+RuntimeError: unsupported operation: more than one element of the written-to tensor refers to a single memory location. Please clone() the tensor before performing the operation.

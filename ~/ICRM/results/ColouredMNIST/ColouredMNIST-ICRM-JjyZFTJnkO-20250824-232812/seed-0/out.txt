@@ -1,0 +1,65 @@
+=> Environment:
+	Python: 3.12.3
+	PyTorch: 2.3.0+cu121
+	Torchvision: 0.18.0+cu121
+	CUDA: 12.1
+	CUDNN: 8902
+	NumPy: 1.26.4
+	PIL: 10.3.0
+=> HParams:
+	additonal_metrics: ['worst_group', 'average']
+	batch_size: 100
+	beta1: 0.5
+	context_length: 100
+	data_augmentation: True
+	densenet121: True
+	device: cuda
+	freeze_bn: 1
+	is_iid_tr: 0
+	is_parallel: True
+	is_supervised: 0
+	is_transformer: 1
+	loss: cross_entropy
+	lr: 9.421443606372292e-05
+	metrics: ['acc']
+	n_embd: 128
+	n_head: 4
+	n_layer: 1
+	n_sampled_tasks: 0
+	nonlinear_classifier: False
+	num_features: 1
+	optimizer_name: Adam
+	output_dir: ~/ICRM/results/ColouredMNIST/ColouredMNIST-ICRM-JjyZFTJnkO-20250824-232812/seed-0
+	overall_seed: 0
+	print_last: 1
+	resnet18: False
+	resnet_dropout: 0
+	terminal_command: /root/autodl-tmp/test/feta/ICRM/ICRM/main.py --data_dir=/mnt/data02/gll_yong/ICRM/data/MNIST --algorithm ICRM --dataset ColouredMNIST
+	test_batch_size: 100
+	trial_seed: 0
+	weight_decay: 9.220948243966033e-05
+=> Seed of the run set to 0
+=> n training domains: 3; sizes = [20999, 4666, 5833]
+=> n validation domains: 3
+=> n testing domains:    3
+
+对对对就是这个！！
+=> Using data parallel
+=> Checkpointing based on acc(e-0)
+step             step_time        train_acc        train_loss       wo_va_acc(e-100  wo_va_acc(e-75)  wo_va_acc(e-50)  wo_va_acc(e-25)  wo_va_acc(e-0)   avg_va_acc(e-10  avg_va_acc(e-75  avg_va_acc(e-50  avg_va_acc(e-25  avg_va_acc(e-0)  wo_te_acc(e-100  wo_te_acc(e-75)  wo_te_acc(e-50)  wo_te_acc(e-25)  wo_te_acc(e-0)   avg_te_acc(e-10  avg_te_acc(e-75  avg_te_acc(e-50  avg_te_acc(e-25  avg_te_acc(e-0)  best_va          best_te         
+0                0.0000           0.5400           0.7884           0.5048           0.5002           0.5122           0.5017           0.5003           0.5190           0.5114           0.5358           0.5139           0.5124           0.4989           0.5040           0.5148           0.4991           0.4983           0.5226           0.5168           0.5414           0.5079           0.5068           0.5124           0.5068          
+50               0.0000           0.7333           0.5760           0.6867           0.6863           0.6859           0.6860           0.6857           0.6881           0.6892           0.6895           0.6890           0.6888           0.6876           0.6875           0.6871           0.6876           0.6875           0.6934           0.6926           0.6917           0.6931           0.6927           0.6888           0.6927          
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/main.py", line 247, in <module>
+    utils.save_checkpoint(algorithm, algorithm.optimizer, hparams, args, info, os.path.join(args.output_dir, 'models'), filename = 'checkpoint.pth.tar', save_best = False)#如果当前的验证集指标 ckpt_metric 优于之前记录的最佳验证指标 best_va，并且当前步数满足 test_eval_freq 的要求，则保存当前模型为 最佳模型。
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/utils.py", line 119, in save_checkpoint
+    torch.save(save_dict, os.path.join(output_dir, filename))         
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/serialization.py", line 628, in save
+    _save(obj, opened_zipfile, pickle_module, pickle_protocol, _disable_byteorder_record)
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/serialization.py", line 862, in _save
+    zip_file.write_record(name, storage, num_bytes)
+KeyboardInterrupt

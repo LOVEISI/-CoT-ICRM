@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/main.py", line 220, in <module>
+    val_metric_results = algorithm.evaluate(loader, cache = validation_cache[index])#val_metric_results 是评估结果，通常是一个字典，包含了各种性能指标（如准确率、损失等）                
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/algorithms.py", line 747, in evaluate
+    result = self._evaluate_robust(self.network, loader, self.hparams['metrics'],  cache)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/algorithms.py", line 668, in _evaluate_robust
+    assert 2 * T0 <= n_pos, \
+           ^^^^^^^^^^^^^^^
+AssertionError: warmup length(2*75) exceeds n_positions(100)

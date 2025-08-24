@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/main.py", line 247, in <module>
+    utils.save_checkpoint(algorithm, algorithm.optimizer, hparams, args, info, os.path.join(args.output_dir, 'models'), filename = 'checkpoint.pth.tar', save_best = False)#如果当前的验证集指标 ckpt_metric 优于之前记录的最佳验证指标 best_va，并且当前步数满足 test_eval_freq 的要求，则保存当前模型为 最佳模型。
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/test/feta/ICRM/ICRM/utils.py", line 119, in save_checkpoint
+    torch.save(save_dict, os.path.join(output_dir, filename))         
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/serialization.py", line 628, in save
+    _save(obj, opened_zipfile, pickle_module, pickle_protocol, _disable_byteorder_record)
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/serialization.py", line 862, in _save
+    zip_file.write_record(name, storage, num_bytes)
+KeyboardInterrupt
